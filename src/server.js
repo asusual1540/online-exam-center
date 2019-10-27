@@ -10,6 +10,7 @@ const schema = require("./graphql/schema/index")
 const resolvers = require("./graphql/resolvers/index")
 const upload = require("./middleware/multer")
 const Question = require("./models/question")
+const cors = require('cors')
 
 const typeDefs = schema
 
@@ -49,18 +50,7 @@ cloudinary.config({
   api_secret: "e_c1gq9QHSO3IknVfQXJaYsZ1ok"
 })
 
-
-// server.express.use(function (req, res, next) {
-//   res.header('Access-Control-Allow-Origin', "http://localhost:3000");
-//   res.header(
-//     'Access-Control-Allow-Headers',
-//     'Origin, X-Requested-With, Content-Type, Accept'
-//   );
-//   res.setHeader("Content-Security-Policy", "script-src 'self'")
-//   next()
-// })
-
-
+server.express.use(cors())
 server.express.use(BodyParser.json({ limit: '50mb' }))
 server.express.use(BodyParser.urlencoded({ extended: true }))
 
@@ -103,10 +93,7 @@ server.express.post('/api/upload', function (req, res) {
 const opts = {
   port: process.env.PORT || 8000,
   endpoint: '/',
-  playground: false,
-  cors: {
-    credentials: true
-  }
+  playground: false
 }
 
 const wwwPath = path.join(__dirname, 'www')
