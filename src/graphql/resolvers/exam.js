@@ -1,4 +1,3 @@
-const bcrypt = require("bcrypt")
 const Exam = require("../../models/exam")
 const Teacher = require("../../models/teacher")
 const Student = require("../../models/student")

@@ -1,37 +1,75 @@
 const BodyParser = require("body-parser")
 const multer = require('multer')
 const cloudinary = require('cloudinary')
-const { GraphQLServer, PubSub } = require("graphql-yoga")
+const { ApolloServer } = require('apollo-server-express')
+const { ApolloServerPluginLandingPageLocalDefault, ApolloServerPluginDrainHttpServer } = require('apollo-server-core')
+const { PubSub } = require('graphql-subscriptions')
 const mongoose = require("mongoose")
 const url = require('url')
 const path = require('path')
 const express = require('express')
+const cors = require('cors')
+const http = require('http')
+
+
 const schema = require("./graphql/schema/index")
 const resolvers = require("./graphql/resolvers/index")
 const upload = require("./middleware/multer")
 const Question = require("./models/question")
-const cors = require('cors')
+
 
 const typeDefs = schema
 
 const pubsub = new PubSub()
 
-const server = new GraphQLServer({
-  typeDefs,
-  resolvers,
-  context(request) {
-    return {
-      request,
-      pubsub
-    }
-  }
-})
-//adnan:adnan1540@ds129625.mlab.com:29625/online-exam-center
-//mongodb://adnan:adnan1540@ds129625.mlab.com:29625/online-exam-center
-// mongodb://localhost:27017/oem
+
+async function startApolloServer(typeDefs, resolvers) {
+  // Required logic for integrating with Express
+  const app = express();
+  // Our httpServer handles incoming requests to our Express app.
+  // Below, we tell Apollo Server to "drain" this httpServer,
+  // enabling our servers to shut down gracefully.
+  const httpServer = http.createServer(app);
+
+  // Same ApolloServer initialization as before, plus the drain plugin
+  // for our httpServer.
+  const server = new ApolloServer({
+    typeDefs,
+    resolvers,
+    csrfPrevention: true,
+    cache: 'bounded',
+    context: ({ req }) => ({
+      request: req,
+      pubsub: pubsub,
+    }),
+    plugins: [
+      ApolloServerPluginDrainHttpServer({ httpServer }),
+      ApolloServerPluginLandingPageLocalDefault({ embed: true }),
+    ],
+  });
+
+  // More required logic for integrating with Express
+  await server.start();
+  server.applyMiddleware({
+    app,
+
+    // By default, apollo-server hosts its GraphQL endpoint at the
+    // server root. However, *other* Apollo Server packages host it at
+    // /graphql. Optionally provide this to match apollo-server.
+    path: '/',
+  });
+
+  // Modified server startup
+  await new Promise(resolve => httpServer.listen({ port: 4000 }, resolve));
+  console.log(`🚀 Server ready at http://localhost:4000${server.graphqlPath}`);
+}
+
+
+
+
 mongoose
   .connect(
-    "mongodb://adnan:adnan1540@ds129625.mlab.com:29625/online-exam-center",
+    "mongodb://localhost:27017/oem",
     {
       useNewUrlParser: true,
       useCreateIndex: true
@@ -44,61 +82,4 @@ mongoose
     console.log(err.message)
   })
 
-cloudinary.config({
-  cloud_name: "bookcycle",
-  api_key: "899686255551365",
-  api_secret: "e_c1gq9QHSO3IknVfQXJaYsZ1ok"
-})
-
-server.express.use(cors())
-server.express.use(BodyParser.json({ limit: '50mb' }))
-server.express.use(BodyParser.urlencoded({ extended: true }))
-
-server.express.post('/api/upload', function (req, res) {
-  upload(req, res, function (err) {
-    if (err instanceof multer.MulterError) {
-      return res.status(500).json(err)
-    } else if (err) {
-      return res.status(500).json(err)
-    }
-    const newImage = req.file.path
-    cloudinary.v2.uploader.upload(
-      newImage,
-      {
-        width: 200,
-        height: 200,
-        crop: "fit"
-      },
-      async (err, result) => {
-        let q = url.parse(req.url, true).query
-        const imgUrl = result.url
-        const e_id = q.e_id
-        const q_id = q.q_id
-        const q_no = Number(q.q_no)
-        try {
-          const question = await Question.findOne({ _id: q_id })
-          if (question["questions"].length < q_no + 1) {
-            return res.json({ "error": "You must submit the question data first" })
-          }
-          question["questions"][q_no]["image"] = imgUrl
-          await question.save()
-          return res.json({ "question": question })
-        } catch (err) {
-          console.log(err)
-        }
-      })
-  })
-})
-
-const opts = {
-  port: process.env.PORT || 8000,
-  endpoint: '/',
-  playground: false
-}
-
-const wwwPath = path.join(__dirname, 'www')
-server.express.use(express.static(wwwPath))
-
-server.start(opts, ({ port }) => {
-  console.log("Server is running on port " + port)
-})
+  startApolloServer(typeDefs, resolvers)
